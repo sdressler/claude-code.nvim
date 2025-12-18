@@ -45,6 +45,19 @@ local M = {}
 -- @field window_navigation boolean Enable window navigation keymaps
 -- @field scrolling boolean Enable scrolling keymaps
 
+--- ClaudeCodeInputBuffer class for buffer input mode configuration
+-- @table ClaudeCodeInputBuffer
+-- @field filetype string Filetype/syntax for the input buffer (default: "markdown")
+-- @field prompt string Prompt text shown at top of buffer
+-- @field keymaps table Keymaps for buffer input mode
+-- @field keymaps.send string Keymap to send buffer content (default: "<C-CR>")
+-- @field keymaps.cancel string Keymap to cancel input (default: "<Esc><Esc>")
+
+--- ClaudeCodeInput class for input mode configuration
+-- @table ClaudeCodeInput
+-- @field mode string Input mode: "terminal" or "buffer" (default: "terminal")
+-- @field buffer ClaudeCodeInputBuffer Buffer input mode settings
+
 --- ClaudeCodeCommandVariants class for command variant configuration
 -- @table ClaudeCodeCommandVariants
 -- Conversation management:
@@ -69,6 +82,7 @@ local M = {}
 -- @field command string Command used to launch Claude Code
 -- @field command_variants ClaudeCodeCommandVariants Command variants configuration
 -- @field keymaps ClaudeCodeKeymaps Keymaps configuration
+-- @field input ClaudeCodeInput Input mode settings
 
 --- Default configuration options
 --- @type ClaudeCodeConfig
@@ -133,6 +147,21 @@ M.default_config = {
     },
     window_navigation = true, -- Enable window navigation keymaps (<C-h/j/k/l>)
     scrolling = true, -- Enable scrolling keymaps (<C-f/b>) for page up/down
+  },
+  -- Input mode settings
+  input = {
+    mode = 'terminal', -- Input mode: "terminal" for CLI mirroring or "buffer" for vim editing
+    buffer = {
+      filetype = 'markdown', -- Syntax highlighting filetype
+      prompt = '# Send with <C-s> or :ClaudeCodeSend\n',
+      enable_copilot = true, -- Enable copilot in input buffer
+      keymaps = {
+        send = '<C-s>', -- Send buffer content to Claude
+        insert_files = '<C-f>', -- Insert files from fzf
+        insert_directory = '<C-d>', -- Insert directory from fzf
+        cancel = '<Esc><Esc>', -- Cancel input without sending
+      },
+    },
   },
 }
 
@@ -381,6 +410,50 @@ local function validate_command_variants_config(command_variants)
   return true, nil
 end
 
+--- Validate input configuration
+--- @param input table Input configuration
+--- @return boolean valid
+--- @return string? error_message
+local function validate_input_config(input)
+  if type(input) ~= 'table' then
+    return false, 'input config must be a table'
+  end
+
+  if input.mode ~= 'terminal' and input.mode ~= 'buffer' then
+    return false, 'input.mode must be "terminal" or "buffer"'
+  end
+
+  if type(input.buffer) ~= 'table' then
+    return false, 'input.buffer must be a table'
+  end
+
+  if type(input.buffer.filetype) ~= 'string' then
+    return false, 'input.buffer.filetype must be a string'
+  end
+
+  if type(input.buffer.prompt) ~= 'string' then
+    return false, 'input.buffer.prompt must be a string'
+  end
+
+  if type(input.buffer.keymaps) ~= 'table' then
+    return false, 'input.buffer.keymaps must be a table'
+  end
+
+  if type(input.buffer.keymaps.send) ~= 'string' then
+    return false, 'input.buffer.keymaps.send must be a string'
+  end
+
+  if type(input.buffer.keymaps.insert_files) ~= 'string' then
+    return false, 'input.buffer.keymaps.insert_files must be a string'
+  end
+
+  if type(input.buffer.keymaps.cancel) ~= 'string' then
+    return false, 'input.buffer.keymaps.cancel must be a string'
+  end
+
+  return true, nil
+end
+
 --- Validate configuration options
 --- @param config ClaudeCodeConfig
 --- @return boolean valid
@@ -444,6 +517,12 @@ local function validate_config(config)
           'keymaps.toggle.variants.' .. variant_name .. ' has no corresponding command variant'
       end
     end
+  end
+
+  -- Validate input settings
+  valid, err = validate_input_config(config.input)
+  if not valid then
+    return false, err
   end
 
   return true, nil
