@@ -22,6 +22,7 @@ local commands = require('claude-code.commands')
 local keymaps = require('claude-code.keymaps')
 local file_refresh = require('claude-code.file_refresh')
 local terminal = require('claude-code.terminal')
+local input = require('claude-code.input')
 local git = require('claude-code.git')
 local version = require('claude-code.version')
 
@@ -55,15 +56,23 @@ local function get_current_buffer_number()
   return nil
 end
 
---- Toggle the Claude Code terminal window
+--- Toggle the Claude Code terminal window or open buffer input
 --- This is a public function used by commands
 function M.toggle()
-  terminal.toggle(M, M.config, git)
+  -- Check if we should use buffer input mode instead of terminal
+  if M.config.input.mode == 'buffer' then
+    local instance_id = M.config.git.multi_instance and (git.get_git_root() or vim.fn.getcwd())
+      or 'global'
+    input.open_input_buffer(M, M.config, git, instance_id)
+  else
+    -- Use terminal mode (default behavior)
+    terminal.toggle(M, M.config, git)
 
-  -- Set up terminal navigation keymaps after toggling
-  local bufnr = get_current_buffer_number()
-  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-    keymaps.setup_terminal_navigation(M, M.config)
+    -- Set up terminal navigation keymaps after toggling
+    local bufnr = get_current_buffer_number()
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      keymaps.setup_terminal_navigation(M, M.config)
+    end
   end
 end
 
@@ -72,6 +81,16 @@ end
 function M.toggle_with_variant(variant_name)
   if not variant_name or not M.config.command_variants[variant_name] then
     -- If variant doesn't exist, fall back to regular toggle
+    return M.toggle()
+  end
+
+  -- Variants only work in terminal mode
+  if M.config.input.mode == 'buffer' then
+    vim.notify(
+      'Command variants are not supported in buffer input mode. '
+        .. 'Switch to terminal mode or use the buffer directly.',
+      vim.log.levels.WARN
+    )
     return M.toggle()
   end
 
