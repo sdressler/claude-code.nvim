@@ -4,6 +4,8 @@
 --- It defines user commands and command handlers.
 ---@brief ]]
 
+local input = require('claude-code.input')
+
 local M = {}
 
 --- @type table<string, function> List of available commands and their handlers
@@ -34,6 +36,11 @@ function M.register_commands(claude_code)
   vim.api.nvim_create_user_command('ClaudeCodeVersion', function()
     vim.notify('Claude Code version: ' .. claude_code.version(), vim.log.levels.INFO)
   end, { desc = 'Display Claude Code version' })
+
+  -- Add send command for buffer input mode
+  vim.api.nvim_create_user_command('ClaudeCodeSend', function()
+    input.send_buffer_to_claude()
+  end, { desc = 'Send buffer content to Claude (buffer input mode)' })
 end
 
 return M

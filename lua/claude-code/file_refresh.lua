@@ -20,22 +20,14 @@ function M.setup(claude_code, config)
 
   local augroup = vim.api.nvim_create_augroup('ClaudeCodeFileRefresh', { clear = true })
 
-  -- Create an autocommand that checks for file changes more frequently
-  vim.api.nvim_create_autocmd({
-    'CursorHold',
-    'CursorHoldI',
-    'FocusGained',
-    'BufEnter',
-    'InsertLeave',
-    'TextChanged',
-    'TermLeave',
-    'TermEnter',
-    'BufWinEnter',
-  }, {
+  -- Check for file changes only on focus gain (not during normal buffer navigation)
+  vim.api.nvim_create_autocmd('FocusGained', {
     group = augroup,
     pattern = '*',
     callback = function()
-      if vim.fn.filereadable(vim.fn.expand '%') == 1 then
+      -- Skip checktime for Claude terminal buffers
+      local is_claude_terminal = pcall(vim.api.nvim_buf_get_var, 0, 'claude_terminal')
+      if not is_claude_terminal and vim.fn.filereadable(vim.fn.expand '%') == 1 then
         vim.cmd 'checktime'
       end
     end,
@@ -49,22 +41,7 @@ function M.setup(claude_code, config)
     refresh_timer = nil
   end
 
-  -- Create a timer to check for file changes periodically
-  refresh_timer = vim.loop.new_timer()
-  if refresh_timer then
-    refresh_timer:start(
-      0,
-      config.refresh.timer_interval,
-      vim.schedule_wrap(function()
-        -- Only check time if there's an active Claude Code terminal
-        local current_instance = claude_code.claude_code.current_instance
-        local bufnr = current_instance and claude_code.claude_code.instances[current_instance]
-        if bufnr and vim.api.nvim_buf_is_valid(bufnr) and #vim.fn.win_findbuf(bufnr) > 0 then
-          vim.cmd 'silent! checktime'
-        end
-      end)
-    )
-  end
+  -- Timer disabled to prevent flickering - FocusGained handles file changes
 
   -- Create an autocommand that notifies when a file has been changed externally
   if config.refresh.show_notifications then
@@ -81,33 +58,7 @@ function M.setup(claude_code, config)
   -- Set a shorter updatetime while Claude Code is open
   claude_code.claude_code.saved_updatetime = vim.o.updatetime
 
-  -- When Claude Code opens, set a shorter updatetime
-  vim.api.nvim_create_autocmd('TermOpen', {
-    group = augroup,
-    pattern = '*',
-    callback = function()
-      local buf = vim.api.nvim_get_current_buf()
-      local buf_name = vim.api.nvim_buf_get_name(buf)
-      if buf_name:match('claude%-code$') then
-        claude_code.claude_code.saved_updatetime = vim.o.updatetime
-        vim.o.updatetime = config.refresh.updatetime
-      end
-    end,
-    desc = 'Set shorter updatetime when Claude Code is open',
-  })
-
-  -- When Claude Code closes, restore normal updatetime
-  vim.api.nvim_create_autocmd('TermClose', {
-    group = augroup,
-    pattern = '*',
-    callback = function()
-      local buf_name = vim.api.nvim_buf_get_name(0)
-      if buf_name:match('claude%-code$') then
-        vim.o.updatetime = claude_code.claude_code.saved_updatetime
-      end
-    end,
-    desc = 'Restore normal updatetime when Claude Code is closed',
-  })
+  -- Disabled updatetime modification to prevent interference with Claude CLI's UI updates
 end
 
 --- Clean up the file refresh functionality (stop the timer)
