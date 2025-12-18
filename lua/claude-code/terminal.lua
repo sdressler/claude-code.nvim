@@ -150,9 +150,10 @@ end
 
 --- Configure common window options
 --- @param win_id number Window ID to configure
+--- @param bufnr number Buffer number to configure
 --- @param config table Plugin configuration
 --- @private
-local function configure_window_options(win_id, config)
+local function configure_window_options(win_id, bufnr, config)
   if config.window.hide_numbers then
     vim.api.nvim_set_option_value('number', false, {win = win_id})
     vim.api.nvim_set_option_value('relativenumber', false, {win = win_id})
@@ -161,6 +162,56 @@ local function configure_window_options(win_id, config)
   if config.window.hide_signcolumn then
     vim.api.nvim_set_option_value('signcolumn', 'no', {win = win_id})
   end
+
+  -- Disable scrolloff to prevent flickering during large output
+  vim.api.nvim_set_option_value('scrolloff', 0, {win = win_id})
+
+  -- Set scrollback buffer size (buffer-local option)
+  vim.api.nvim_set_option_value('scrollback', 100000, {buf = bufnr})
+
+  -- Disable syntax/filetype to prevent rendering issues in terminal
+  vim.api.nvim_set_option_value('syntax', '', {buf = bufnr})
+  vim.api.nvim_buf_set_option(bufnr, 'filetype', '')
+
+  -- Optimize redraw behavior for terminal
+  vim.api.nvim_set_option_value('cursorline', false, {win = win_id})
+  vim.api.nvim_set_option_value('cursorcolumn', false, {win = win_id})
+
+  -- Prevent terminal from jumping around during output
+  vim.api.nvim_set_option_value('scrollbind', false, {win = win_id})
+  vim.api.nvim_set_option_value('cursorbind', false, {win = win_id})
+
+  -- Additional passthrough optimizations
+  vim.api.nvim_set_option_value('wrap', true, {win = win_id})
+  vim.api.nvim_set_option_value('linebreak', false, {win = win_id})
+
+  -- Mark this buffer as a Claude terminal to exclude from file refresh checks
+  vim.api.nvim_buf_set_var(bufnr, 'claude_terminal', true)
+
+  -- Force terminal to always show bottom (tail -f behavior)
+  local tail_group = vim.api.nvim_create_augroup('ClaudeCodeTailMode_' .. bufnr, { clear = true })
+
+  -- Keep view at bottom when terminal content changes (during redraws)
+  vim.api.nvim_create_autocmd('TermResponse', {
+    group = tail_group,
+    buffer = bufnr,
+    callback = function()
+      -- Stay at bottom during terminal updates using feedkeys
+      pcall(function()
+        local win_ids = vim.fn.win_findbuf(bufnr)
+        for _, wid in ipairs(win_ids) do
+          if vim.api.nvim_win_is_valid(wid) then
+            vim.api.nvim_win_call(wid, function()
+              -- Use feedkeys to jump to bottom in a way that works in terminal mode
+              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>G', true, true, true), 't', false)
+              -- Immediately re-enter insert mode
+              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('i', true, true, true), 't', false)
+            end)
+          end
+        end
+      end)
+    end,
+  })
 end
 
 --- Generate buffer name for instance
@@ -235,11 +286,9 @@ function M.force_insert_mode(claude_code, config)
     end
 
     local mode = vim.api.nvim_get_mode().mode
-    if vim.bo.buftype == 'terminal' and mode ~= 't' and mode ~= 'i' then
-      vim.cmd 'silent! stopinsert'
-      vim.schedule(function()
-        vim.cmd 'silent! startinsert'
-      end)
+    -- Only force insert if in normal mode, not during terminal mode (prevents flicker during output)
+    if vim.bo.buftype == 'terminal' and mode == 'n' then
+      vim.cmd 'silent! startinsert'
     end
   end
 end
@@ -304,11 +353,9 @@ local function handle_existing_instance(bufnr, config)
     else
       create_split(config.window.position, config, bufnr)
     end
-    -- Force insert mode more aggressively unless configured to start in normal mode
+    -- Enter insert mode once when reopening (without scheduling to avoid scroll issues)
     if not config.window.start_in_normal_mode then
-      vim.schedule(function()
-        vim.cmd 'stopinsert | startinsert'
-      end)
+      vim.cmd 'startinsert'
     end
   end
 end
@@ -342,7 +389,7 @@ local function create_new_instance(claude_code, config, git, instance_id)
     vim.api.nvim_buf_set_name(new_bufnr, buffer_name)
 
     -- Configure window options
-    configure_window_options(win_id, config)
+    configure_window_options(win_id, new_bufnr, config)
 
     -- Store buffer number for this instance
     claude_code.claude_code.instances[instance_id] = new_bufnr
@@ -366,12 +413,13 @@ local function create_new_instance(claude_code, config, git, instance_id)
     local buffer_name = generate_buffer_name(instance_id, config)
     vim.cmd('file ' .. buffer_name)
 
+    -- Store buffer number for this instance
+    local current_bufnr = vim.fn.bufnr('%')
+    claude_code.claude_code.instances[instance_id] = current_bufnr
+
     -- Configure window options using helper function
     local current_win = vim.api.nvim_get_current_win()
-    configure_window_options(current_win, config)
-
-    -- Store buffer number for this instance
-    claude_code.claude_code.instances[instance_id] = vim.fn.bufnr('%')
+    configure_window_options(current_win, current_bufnr, config)
 
     -- Automatically enter insert mode in terminal unless configured to start in normal mode
     if config.window.enter_insert and not config.window.start_in_normal_mode then
