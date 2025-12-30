@@ -283,6 +283,36 @@ function M.send_buffer_to_claude()
   vim.notify('Message sent to Claude', vim.log.levels.INFO)
 end
 
+--- Send interrupt signal (Escape) to Claude
+function M.send_interrupt()
+  local instance_id = M.state.instance_id or (M.state.git and M.state.git.get_git_root()) or vim.fn.getcwd()
+  local claude_code = M.state.claude_code
+
+  if not claude_code then
+    vim.notify('Claude Code instance not found', vim.log.levels.WARN)
+    return
+  end
+
+  local claude_bufnr = claude_code.claude_code.instances[instance_id]
+  if not claude_bufnr or not vim.api.nvim_buf_is_valid(claude_bufnr) then
+    vim.notify('Claude terminal buffer not found', vim.log.levels.WARN)
+    return
+  end
+
+  local job_id = nil
+  pcall(function()
+    job_id = vim.api.nvim_buf_get_var(claude_bufnr, 'terminal_job_id')
+  end)
+
+  if not job_id then
+    vim.notify('Claude terminal job not found', vim.log.levels.WARN)
+    return
+  end
+
+  vim.fn.chansend(job_id, '\27')
+  vim.notify('Interrupt signal sent to Claude', vim.log.levels.INFO)
+end
+
 --- Navigate to previous message in history
 function M.history_previous()
   local bufnr = M.state.bufnr
@@ -501,6 +531,10 @@ function M.setup_buffer_keymaps(bufnr, config, git)
   -- History picker keymap
   vim.keymap.set('i', '<C-h>', M.open_history_picker, opts)
   vim.keymap.set('n', '<C-h>', M.open_history_picker, opts)
+
+  -- Interrupt Claude
+  vim.keymap.set('i', '<C-x>', M.send_interrupt, opts)
+  vim.keymap.set('n', '<C-x>', M.send_interrupt, opts)
 
   vim.keymap.set('i', '<Esc>', '<Esc>', opts) -- Allow escape to exit insert mode
 

@@ -6,6 +6,11 @@
 
 local M = {}
 
+--- Send interrupt signal (Escape) to Claude terminal
+function M.send_interrupt()
+  require('claude-code.input').send_interrupt()
+end
+
 --- Register keymaps for claude-code.nvim
 --- @param claude_code table The main plugin module
 --- @param config table The plugin configuration
@@ -33,6 +38,14 @@ function M.register_keymaps(claude_code, config)
       vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Toggle' })
     )
   end
+
+  -- Interrupt Claude with Escape key
+  vim.api.nvim_set_keymap(
+    't',
+    '<C-x>',
+    [[<C-\><C-n>:lua require('claude-code.keymaps').send_interrupt()<CR>]],
+    vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Interrupt' })
+  )
 
   -- Register variant keymaps if configured
   if config.keymaps.toggle.variants then
