@@ -47,6 +47,14 @@ function M.register_keymaps(claude_code, config)
     vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Interrupt' })
   )
 
+  -- Insert newline marker in terminal mode
+  vim.api.nvim_set_keymap(
+    't',
+    '<S-CR>',
+    [[\+Return]],
+    vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Insert newline marker' })
+  )
+
   -- Register variant keymaps if configured
   if config.keymaps.toggle.variants then
     for variant_name, keymap in pairs(config.keymaps.toggle.variants) do
