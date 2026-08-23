@@ -124,3 +124,8 @@ luac.out
 *.src.rock
 *.zip
 *.tar.gz
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
