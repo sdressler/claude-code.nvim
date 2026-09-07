@@ -386,6 +386,74 @@ describe('terminal module', function()
     end)
   end)
 
+  describe('toggle with an additional tool', function()
+    it('should namespace the tool instance separately from Claude', function()
+      config.git.use_git_root = false
+      config.git.multi_instance = true
+
+      -- Open the default Claude instance first
+      terminal.toggle(claude_code, config, git)
+      local claude_instance_key = claude_code.claude_code.current_instance
+
+      -- Open a Devin instance in the same repo
+      terminal.toggle(claude_code, config, git, { name = 'devin', command = 'devin' })
+      local devin_instance_key = claude_code.claude_code.current_instance
+
+      assert.are_not.equal(claude_instance_key, devin_instance_key)
+      assert.is_not_nil(claude_code.claude_code.instances[claude_instance_key])
+      assert.is_not_nil(claude_code.claude_code.instances[devin_instance_key])
+    end)
+
+    it('should launch the tool-specific command and buffer name', function()
+      config.git.use_git_root = false
+      config.git.multi_instance = true
+
+      terminal.toggle(claude_code, config, git, { name = 'devin', command = 'devin' })
+
+      local terminal_cmd_found, file_cmd_found = false, false
+      for _, cmd in ipairs(vim_cmd_calls) do
+        if cmd:match('^terminal devin$') then
+          terminal_cmd_found = true
+        elseif cmd:match('^file devin%-code%-') then
+          file_cmd_found = true
+        end
+      end
+
+      assert.is_true(terminal_cmd_found, 'Terminal command should launch the devin CLI')
+      assert.is_true(file_cmd_found, 'Buffer name should be prefixed with devin-code-')
+    end)
+  end)
+
+  describe('toggle with multi-instance set to "tab"', function()
+    before_each(function()
+      config.git.multi_instance = 'tab'
+      _G.vim.api.nvim_get_current_tabpage = function()
+        return 1
+      end
+    end)
+
+    it('should use tabpage handle as instance identifier', function()
+      terminal.toggle(claude_code, config, git)
+
+      assert.are.equal('tab-1', claude_code.claude_code.current_instance)
+    end)
+
+    it('should create a separate instance for a different tabpage', function()
+      terminal.toggle(claude_code, config, git)
+      local tab1_key = claude_code.claude_code.current_instance
+
+      _G.vim.api.nvim_get_current_tabpage = function()
+        return 2
+      end
+      terminal.toggle(claude_code, config, git)
+      local tab2_key = claude_code.claude_code.current_instance
+
+      assert.are_not.equal(tab1_key, tab2_key)
+      assert.is_not_nil(claude_code.claude_code.instances[tab1_key])
+      assert.is_not_nil(claude_code.claude_code.instances[tab2_key])
+    end)
+  end)
+
   describe('toggle with multi-instance disabled', function()
     before_each(function()
       config.git.multi_instance = false

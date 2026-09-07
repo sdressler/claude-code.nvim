@@ -285,7 +285,9 @@ end
 
 --- Send interrupt signal (Escape) to Claude
 function M.send_interrupt()
-  local instance_id = M.state.instance_id or (M.state.git and M.state.git.get_git_root()) or vim.fn.getcwd()
+  local instance_id = M.state.instance_id
+    or (M.state.git and M.state.git.get_git_root())
+    or vim.fn.getcwd()
   local claude_code = M.state.claude_code
 
   if not claude_code then
@@ -349,14 +351,18 @@ function M.open_history_picker()
 
   local hist = M.history[instance_id]
   local items = {}
+  local seen = {}
 
-  -- Create display items with message preview
+  -- Create display items with message preview, eliminating duplicates
   for i, msg in ipairs(hist.messages) do
-    local preview = msg:sub(1, 60):gsub('\n', ' ')
-    if #msg > 60 then
-      preview = preview .. '...'
+    if not seen[msg] then
+      seen[msg] = true
+      local preview = msg:sub(1, 60):gsub('\n', ' ')
+      if #msg > 60 then
+        preview = preview .. '...'
+      end
+      table.insert(items, { index = i, text = preview, full = msg })
     end
-    table.insert(items, { index = i, text = preview, full = msg })
   end
 
   -- Reverse to show most recent first
@@ -414,6 +420,7 @@ function M.create_input_buffer(config, git, instance_id)
   local bufnr = vim.api.nvim_create_buf(false, false) -- unlisted, not scratch
 
   -- Set buffer options BEFORE setting name to prevent swap file creation
+  -- bufhidden=hide ensures buffer won't be written, swapfile=false prevents swap files
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('buflisted', true, { buf = bufnr })
@@ -538,12 +545,11 @@ function M.setup_buffer_keymaps(bufnr, config, git)
 
   vim.keymap.set('i', '<Esc>', '<Esc>', opts) -- Allow escape to exit insert mode
 
-  -- Set up autocommand to enter insert mode when buffer is entered (no keymap re-application needed)
+  -- Set up autocommand to enter insert mode when buffer is entered
   vim.api.nvim_create_autocmd('BufEnter', {
     group = vim.api.nvim_create_augroup('ClaudeCodeInputKeymaps_' .. bufnr, { clear = true }),
     buffer = bufnr,
     callback = function()
-      -- Only enter insert mode, don't re-apply keymaps
       if vim.api.nvim_buf_is_valid(bufnr) then
         vim.cmd('startinsert')
       end

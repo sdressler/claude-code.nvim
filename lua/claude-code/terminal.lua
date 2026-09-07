@@ -105,7 +105,7 @@ local function create_float(config, existing_bufnr)
     if not vim.api.nvim_buf_is_valid(bufnr) then
       bufnr = vim.api.nvim_create_buf(false, true) -- unlisted, scratch
     else
-      local buftype = vim.api.nvim_get_option_value('buftype', {buf = bufnr})
+      local buftype = vim.api.nvim_get_option_value('buftype', { buf = bufnr })
       if buftype ~= 'terminal' then
         -- Buffer exists but is no longer a terminal, create a new one
         bufnr = vim.api.nvim_create_buf(false, true) -- unlisted, scratch
@@ -155,38 +155,61 @@ end
 --- @private
 local function configure_window_options(win_id, bufnr, config)
   if config.window.hide_numbers then
-    vim.api.nvim_set_option_value('number', false, {win = win_id})
-    vim.api.nvim_set_option_value('relativenumber', false, {win = win_id})
+    vim.api.nvim_set_option_value('number', false, { win = win_id })
+    vim.api.nvim_set_option_value('relativenumber', false, { win = win_id })
   end
 
   if config.window.hide_signcolumn then
-    vim.api.nvim_set_option_value('signcolumn', 'no', {win = win_id})
+    vim.api.nvim_set_option_value('signcolumn', 'no', { win = win_id })
   end
 
   -- Disable scrolloff to prevent flickering during large output
-  vim.api.nvim_set_option_value('scrolloff', 0, {win = win_id})
+  vim.api.nvim_set_option_value('scrolloff', 0, { win = win_id })
 
   -- Set scrollback buffer size (buffer-local option)
-  vim.api.nvim_set_option_value('scrollback', 100000, {buf = bufnr})
+  vim.api.nvim_set_option_value('scrollback', 100000, { buf = bufnr })
 
   -- Disable syntax/filetype to prevent rendering issues in terminal
-  vim.api.nvim_set_option_value('syntax', '', {buf = bufnr})
+  vim.api.nvim_set_option_value('syntax', '', { buf = bufnr })
   vim.api.nvim_buf_set_option(bufnr, 'filetype', '')
 
   -- Optimize redraw behavior for terminal
-  vim.api.nvim_set_option_value('cursorline', false, {win = win_id})
-  vim.api.nvim_set_option_value('cursorcolumn', false, {win = win_id})
+  vim.api.nvim_set_option_value('cursorline', false, { win = win_id })
+  vim.api.nvim_set_option_value('cursorcolumn', false, { win = win_id })
 
   -- Prevent terminal from jumping around during output
-  vim.api.nvim_set_option_value('scrollbind', false, {win = win_id})
-  vim.api.nvim_set_option_value('cursorbind', false, {win = win_id})
+  vim.api.nvim_set_option_value('scrollbind', false, { win = win_id })
+  vim.api.nvim_set_option_value('cursorbind', false, { win = win_id })
 
   -- Additional passthrough optimizations
-  vim.api.nvim_set_option_value('wrap', true, {win = win_id})
-  vim.api.nvim_set_option_value('linebreak', false, {win = win_id})
+  vim.api.nvim_set_option_value('wrap', true, { win = win_id })
+  vim.api.nvim_set_option_value('linebreak', false, { win = win_id })
 
   -- Mark this buffer as a Claude terminal to exclude from file refresh checks
   vim.api.nvim_buf_set_var(bufnr, 'claude_terminal', true)
+
+  -- Guard against accidental submits: plain <CR> inserts a newline marker
+  -- (like <S-CR>) instead of submitting. Real submit moves to <C-CR>, with
+  -- <C-s> as a fallback since some terminals don't send a distinct <C-CR>.
+  local term_map_opts = { noremap = true, silent = true, buffer = bufnr }
+  vim.keymap.set(
+    't',
+    '<CR>',
+    [[\<CR>]],
+    vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Insert newline marker' })
+  )
+  vim.keymap.set(
+    't',
+    '<C-CR>',
+    '<CR>',
+    vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Submit' })
+  )
+  vim.keymap.set(
+    't',
+    '<C-s>',
+    '<CR>',
+    vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Submit' })
+  )
 
   -- Force terminal to always show bottom (tail -f behavior)
   local tail_group = vim.api.nvim_create_augroup('ClaudeCodeTailMode_' .. bufnr, { clear = true })
@@ -203,9 +226,17 @@ local function configure_window_options(win_id, bufnr, config)
           if vim.api.nvim_win_is_valid(wid) then
             vim.api.nvim_win_call(wid, function()
               -- Use feedkeys to jump to bottom in a way that works in terminal mode
-              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-\\><C-n>G', true, true, true), 't', false)
+              vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes('<C-\\><C-n>G', true, true, true),
+                't',
+                false
+              )
               -- Immediately re-enter insert mode
-              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('i', true, true, true), 't', false)
+              vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes('i', true, true, true),
+                't',
+                false
+              )
             end)
           end
         end
@@ -217,13 +248,15 @@ end
 --- Generate buffer name for instance
 --- @param instance_id string Instance identifier
 --- @param config table Plugin configuration
+--- @param buffer_prefix string|nil Buffer name prefix (default "claude-code")
 --- @return string Buffer name
 --- @private
-local function generate_buffer_name(instance_id, config)
+local function generate_buffer_name(instance_id, config, buffer_prefix)
+  local prefix = buffer_prefix or 'claude-code'
   if config.git.multi_instance then
-    return 'claude-code-' .. instance_id:gsub('[^%w%-_]', '-')
+    return prefix .. '-' .. instance_id:gsub('[^%w%-_]', '-')
   else
-    return 'claude-code'
+    return prefix
   end
 end
 
@@ -299,7 +332,9 @@ end
 --- @return string instance_id Instance identifier
 --- @private
 local function get_instance_id(config, git)
-  if config.git.multi_instance then
+  if config.git.multi_instance == 'tab' then
+    return 'tab-' .. vim.api.nvim_get_current_tabpage()
+  elseif config.git.multi_instance then
     if config.git.use_git_root then
       return get_instance_identifier(git)
     else
@@ -310,6 +345,7 @@ local function get_instance_id(config, git)
     return 'global'
   end
 end
+M.get_instance_id = get_instance_id
 
 --- Check if buffer is a valid terminal
 --- @param bufnr number Buffer number
@@ -322,9 +358,9 @@ local function is_valid_terminal_buffer(bufnr)
 
   local buftype = nil
   pcall(function()
-    buftype = vim.api.nvim_get_option_value('buftype', {buf = bufnr})
+    buftype = vim.api.nvim_get_option_value('buftype', { buf = bufnr })
   end)
-  
+
   local terminal_job_id = nil
   pcall(function()
     terminal_job_id = vim.b[bufnr].terminal_job_id
@@ -365,12 +401,23 @@ end
 --- @param config table Plugin configuration
 --- @param git table Git module
 --- @param instance_id string Instance identifier
+--- @param instance_key string Key used to store the buffer in the instances table
+--- @param command string Command to launch in the terminal
+--- @param buffer_prefix string Buffer name prefix for this tool
 --- @private
-local function create_new_instance(claude_code, config, git, instance_id)
+local function create_new_instance(
+  claude_code,
+  config,
+  git,
+  instance_id,
+  instance_key,
+  command,
+  buffer_prefix
+)
   if config.window.position == 'float' then
     -- For floating window, create buffer first with terminal
     local new_bufnr = vim.api.nvim_create_buf(false, true) -- unlisted, scratch
-    vim.api.nvim_set_option_value('bufhidden', 'hide', {buf = new_bufnr})
+    vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = new_bufnr })
 
     -- Create the floating window
     local win_id = create_float(config, new_bufnr)
@@ -379,20 +426,20 @@ local function create_new_instance(claude_code, config, git, instance_id)
     vim.api.nvim_win_set_buf(win_id, new_bufnr)
 
     -- Determine command
-    local cmd = build_command_with_git_root(config, git, config.command)
+    local cmd = build_command_with_git_root(config, git, command)
 
     -- Run terminal in the buffer
     vim.fn.termopen(cmd)
 
     -- Create a unique buffer name
-    local buffer_name = generate_buffer_name(instance_id, config)
+    local buffer_name = generate_buffer_name(instance_id, config, buffer_prefix)
     vim.api.nvim_buf_set_name(new_bufnr, buffer_name)
 
     -- Configure window options
     configure_window_options(win_id, new_bufnr, config)
 
     -- Store buffer number for this instance
-    claude_code.claude_code.instances[instance_id] = new_bufnr
+    claude_code.claude_code.instances[instance_key] = new_bufnr
 
     -- Enter insert mode if configured
     if config.window.enter_insert and not config.window.start_in_normal_mode then
@@ -403,19 +450,19 @@ local function create_new_instance(claude_code, config, git, instance_id)
     create_split(config.window.position, config)
 
     -- Determine if we should use the git root directory
-    local base_cmd = build_command_with_git_root(config, git, config.command)
+    local base_cmd = build_command_with_git_root(config, git, command)
     local cmd = 'terminal ' .. base_cmd
 
     vim.cmd(cmd)
     vim.cmd 'setlocal bufhidden=hide'
 
     -- Create a unique buffer name
-    local buffer_name = generate_buffer_name(instance_id, config)
+    local buffer_name = generate_buffer_name(instance_id, config, buffer_prefix)
     vim.cmd('file ' .. buffer_name)
 
     -- Store buffer number for this instance
     local current_bufnr = vim.fn.bufnr('%')
-    claude_code.claude_code.instances[instance_id] = current_bufnr
+    claude_code.claude_code.instances[instance_key] = current_bufnr
 
     -- Configure window options using helper function
     local current_win = vim.api.nvim_get_current_win()
@@ -432,18 +479,27 @@ end
 --- @param claude_code table The main plugin module
 --- @param config table The plugin configuration
 --- @param git table The git module
-function M.toggle(claude_code, config, git)
+--- @param tool table|nil Non-default tool to launch instead of Claude Code
+---   @field name string Tool name (used to namespace the instance and buffer)
+---   @field command string Command to launch the tool's CLI
+function M.toggle(claude_code, config, git, tool)
   -- Determine instance ID based on config
   local instance_id = get_instance_id(config, git)
-  claude_code.claude_code.current_instance = instance_id
+  -- Default (Claude) instances keep the bare instance_id for backward compatibility;
+  -- additional tools are namespaced so they don't collide with Claude's instance.
+  local instance_key = tool and (tool.name .. '::' .. instance_id) or instance_id
+  local command = tool and tool.command or config.command
+  local buffer_prefix = tool and (tool.name .. '-code') or 'claude-code'
 
-  -- Check if this Claude Code instance is already running
-  local bufnr = claude_code.claude_code.instances[instance_id]
+  claude_code.claude_code.current_instance = instance_key
+
+  -- Check if this instance is already running
+  local bufnr = claude_code.claude_code.instances[instance_key]
 
   -- Validate existing buffer
   if bufnr and not is_valid_terminal_buffer(bufnr) then
     -- Buffer is no longer a valid terminal, reset
-    claude_code.claude_code.instances[instance_id] = nil
+    claude_code.claude_code.instances[instance_key] = nil
     bufnr = nil
   end
 
@@ -453,10 +509,10 @@ function M.toggle(claude_code, config, git)
   else
     -- Prune invalid buffer entries
     if bufnr and not vim.api.nvim_buf_is_valid(bufnr) then
-      claude_code.claude_code.instances[instance_id] = nil
+      claude_code.claude_code.instances[instance_key] = nil
     end
     -- Create new instance
-    create_new_instance(claude_code, config, git, instance_id)
+    create_new_instance(claude_code, config, git, instance_id, instance_key, command, buffer_prefix)
   end
 end
 

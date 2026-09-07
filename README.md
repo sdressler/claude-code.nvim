@@ -118,6 +118,8 @@ require("claude-code").setup({
   -- Git project settings
   git = {
     use_git_root = true,     -- Set CWD to git root when opening Claude Code (if in git project)
+    multi_instance = "tab",  -- "tab": one instance per Neovim tabpage (default),
+                              -- true: one instance per git root/cwd, false: one global instance
   },
   -- Shell-specific settings
   shell = {
@@ -136,6 +138,17 @@ require("claude-code").setup({
     -- Output options
     verbose = "--verbose",   -- Enable verbose logging with full turn-by-turn output
   },
+  -- Additional CLI tools beyond Claude Code. Each entry gets its own
+  -- `<Tool>Code` command, command variants, and terminal instances that
+  -- can run side-by-side with Claude Code in the same repo.
+  tools = {
+    devin = {
+      command = "devin",       -- Requires the `devin` CLI to be installed and in PATH
+      command_variants = {
+        resume = "--resume",   -- Display an interactive conversation picker
+      },
+    },
+  },
   -- Keymaps
   keymaps = {
     toggle = {
@@ -149,6 +162,48 @@ require("claude-code").setup({
     window_navigation = true, -- Enable window navigation keymaps (<C-h/j/k/l>)
     scrolling = true,         -- Enable scrolling keymaps (<C-f/b>) for page up/down
   }
+})
+```
+
+### Multiple sessions per tab
+
+By default (`git.multi_instance = "tab"`), each Neovim tabpage gets its own
+Claude Code session, independent of the git root or working directory.
+Opening two tabs on the same repo gets two separate Claude sessions. Use
+`:ClaudeCodeTab` to open a new tab and start its session in one step
+(equivalent to `:tabnew` followed by `:ClaudeCode`). Splits inside a tab
+share that tab's session, same as normal split/tab behavior in Neovim.
+
+Set `git.multi_instance = true` to instead key sessions by git root/cwd (one
+session per repo, shared across tabs), or `false` for a single global
+session.
+
+### Running additional tools alongside Claude Code
+
+Any CLI tool that behaves like Claude Code (accepts a plain command plus
+optional flags, and runs interactively in a terminal) can be added under
+`tools`. For each tool named `<name>` in the table, the plugin registers a
+`:<Name>Code` command (e.g. `:DevinCode` for `devin`), plus one command per
+entry in that tool's `command_variants` (e.g. `:DevinCodeResume`). Each tool
+gets its own terminal instance per git root, so Claude Code and Devin can be
+open side by side without clobbering each other.
+
+```lua
+require("claude-code").setup({
+  tools = {
+    devin = {
+      command = "devin",
+      command_variants = {
+        resume = "--resume",
+      },
+      keymaps = {
+        toggle = {
+          normal = "<leader>ad",
+          terminal = "<C-.>",
+        },
+      },
+    },
+  },
 })
 ```
 
@@ -174,6 +229,7 @@ vim.keymap.set('n', '<leader>cc', '<cmd>ClaudeCode<CR>', { desc = 'Toggle Claude
 Basic command:
 
 - `:ClaudeCode` - Toggle the Claude Code terminal window
+- `:ClaudeCodeTab` - Open a new tab and start (with `multi_instance = "tab"`, a fresh) Claude Code session in it
 
 Conversation management commands:
 
@@ -185,6 +241,8 @@ Output options command:
 - `:ClaudeCodeVerbose` - Enable verbose logging with full turn-by-turn output
 
 Note: Commands are automatically generated for each entry in your `command_variants` configuration.
+
+Additional tools (e.g. `:DevinCode`, `:DevinCodeResume`) are generated the same way for each entry configured under `tools`.
 
 ### Key Mappings
 
@@ -206,6 +264,8 @@ Additionally, when in the Claude Code terminal:
 - `<C-l>` - Move to the window on the right
 - `<C-f>` - Scroll full-page down
 - `<C-b>` - Scroll full-page up
+- `<CR>` - Insert a newline marker instead of submitting (guards against accidental Enter presses)
+- `<C-CR>` or `<C-s>` - Actually submit (sends the real Enter Claude's CLI expects)
 
 Note: After scrolling with `<C-f>` or `<C-b>`, you'll need to press the `i` key to re-enter insert mode so you can continue typing to Claude Code.
 

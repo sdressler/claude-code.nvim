@@ -123,6 +123,22 @@ describe('config validation', function()
       local result = config.parse_config(invalid_config, true) -- silent mode
       assert.are.equal(config.default_config.git.use_git_root, result.git.use_git_root)
     end)
+
+    it('should accept "tab" as a valid git.multi_instance value', function()
+      local valid_config = vim.deepcopy(config.default_config)
+      valid_config.git.multi_instance = 'tab'
+
+      local result = config.parse_config(valid_config, true) -- silent mode
+      assert.are.equal('tab', result.git.multi_instance)
+    end)
+
+    it('should reject invalid git.multi_instance string values', function()
+      local invalid_config = vim.deepcopy(config.default_config)
+      invalid_config.git.multi_instance = 'invalid'
+
+      local result = config.parse_config(invalid_config, true) -- silent mode
+      assert.are.equal(config.default_config.git.multi_instance, result.git.multi_instance)
+    end)
   end)
 
   describe('keymaps validation', function()
@@ -159,6 +175,39 @@ describe('config validation', function()
         config.default_config.keymaps.window_navigation,
         result.keymaps.window_navigation
       )
+    end)
+  end)
+
+  describe('tools validation', function()
+    it('should accept a valid additional tool configuration', function()
+      local user_config = {
+        tools = {
+          devin = {
+            command = 'devin',
+            command_variants = { resume = '--resume' },
+          },
+        },
+      }
+
+      local result = config.parse_config(user_config, true) -- silent mode
+      assert.are.equal('devin', result.tools.devin.command)
+      assert.are.equal('--resume', result.tools.devin.command_variants.resume)
+    end)
+
+    it('should reject a tool missing a command string', function()
+      local invalid_config = vim.deepcopy(config.default_config)
+      invalid_config.tools = { devin = { command_variants = {} } }
+
+      local result = config.parse_config(invalid_config, true) -- silent mode
+      assert.are.same(config.default_config.tools, result.tools)
+    end)
+
+    it('should reject a tool with an invalid command_variants entry', function()
+      local invalid_config = vim.deepcopy(config.default_config)
+      invalid_config.tools = { devin = { command = 'devin', command_variants = { resume = 1 } } }
+
+      local result = config.parse_config(invalid_config, true) -- silent mode
+      assert.are.same(config.default_config.tools, result.tools)
     end)
   end)
 end)

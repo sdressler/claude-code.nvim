@@ -51,7 +51,7 @@ function M.register_keymaps(claude_code, config)
   vim.api.nvim_set_keymap(
     't',
     '<S-CR>',
-    [[\+Return]],
+    [[\<CR>]],
     vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Insert newline marker' })
   )
 
@@ -68,6 +68,33 @@ function M.register_keymaps(claude_code, config)
           keymap,
           string.format([[<cmd>%s<CR>]], cmd_name),
           vim.tbl_extend('force', map_opts, { desc = 'Claude Code: ' .. capitalized_name })
+        )
+      end
+    end
+  end
+
+  -- Register keymaps for additional tools (e.g. Devin), config.tools.<name>.keymaps.toggle
+  for tool_name, tool_config in pairs(config.tools or {}) do
+    local tool_keymap = tool_config.keymaps and tool_config.keymaps.toggle
+    if tool_keymap then
+      local tool_capitalized = tool_name:gsub('^%l', string.upper)
+      local tool_cmd_name = tool_capitalized .. 'Code'
+
+      if tool_keymap.normal then
+        vim.api.nvim_set_keymap(
+          'n',
+          tool_keymap.normal,
+          string.format([[<cmd>%s<CR>]], tool_cmd_name),
+          vim.tbl_extend('force', map_opts, { desc = tool_capitalized .. ': Toggle' })
+        )
+      end
+
+      if tool_keymap.terminal then
+        vim.api.nvim_set_keymap(
+          't',
+          tool_keymap.terminal,
+          string.format([[<C-\><C-n>:%s<CR>]], tool_cmd_name),
+          vim.tbl_extend('force', map_opts, { desc = tool_capitalized .. ': Toggle' })
         )
       end
     end

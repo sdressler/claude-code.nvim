@@ -30,7 +30,12 @@ describe('command registration', function()
     -- Create mock claude_code module
     local claude_code = {
       toggle = function() return true end,
-      version = function() return '0.3.0' end
+      open_in_new_tab = function() return true end,
+      version = function() return '0.3.0' end,
+      config = {
+        command_variants = {},
+        tools = {},
+      }
     }
     
     -- Run the register_commands function
@@ -53,6 +58,21 @@ describe('command registration', function()
       assert.is_true(command_registered, "ClaudeCode command should be registered")
     end)
     
+    it('should register ClaudeCodeTab command', function()
+      local command_registered = false
+      for _, cmd in ipairs(registered_commands) do
+        if cmd.name == 'ClaudeCodeTab' then
+          command_registered = true
+          assert.is_not_nil(cmd.callback, "ClaudeCodeTab command should have a callback")
+          assert.is_not_nil(cmd.opts, "ClaudeCodeTab command should have options")
+          assert.is_not_nil(cmd.opts.desc, "ClaudeCodeTab command should have a description")
+          break
+        end
+      end
+
+      assert.is_true(command_registered, "ClaudeCodeTab command should be registered")
+    end)
+
     it('should register ClaudeCodeVersion command', function()
       local command_registered = false
       for _, cmd in ipairs(registered_commands) do
@@ -92,6 +112,24 @@ describe('command registration', function()
       assert.is_true(toggle_called, "Toggle function should be called when ClaudeCode command is executed")
     end)
     
+    it('should call open_in_new_tab when ClaudeCodeTab command is executed', function()
+      local open_in_new_tab_called = false
+
+      for _, cmd in ipairs(registered_commands) do
+        if cmd.name == 'ClaudeCodeTab' then
+          cmd.callback = function()
+            open_in_new_tab_called = true
+            return true
+          end
+
+          cmd.callback()
+          break
+        end
+      end
+
+      assert.is_true(open_in_new_tab_called, "open_in_new_tab function should be called when ClaudeCodeTab command is executed")
+    end)
+
     it('should call notify with version when ClaudeCodeVersion command is executed', function()
       local notify_called = false
       local notify_message = nil

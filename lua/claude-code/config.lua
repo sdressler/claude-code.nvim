@@ -32,7 +32,8 @@ local M = {}
 --- ClaudeCodeGit class for git integration configuration
 -- @table ClaudeCodeGit
 -- @field use_git_root boolean Set CWD to git root when opening Claude Code (if in git project)
--- @field multi_instance boolean Use multiple Claude instances (one per git root)
+-- @field multi_instance boolean|string Use multiple Claude instances: true (one per git root/cwd),
+--   false (single global instance), or "tab" (one per Neovim tabpage)
 
 --- ClaudeCodeKeymapsToggle class for toggle keymap configuration
 -- @table ClaudeCodeKeymapsToggle
@@ -67,6 +68,14 @@ local M = {}
 -- @field verbose string|boolean Enable verbose logging with full turn-by-turn output
 -- Additional options can be added as needed
 
+--- ClaudeCodeTool class for a single CLI tool's configuration
+-- @table ClaudeCodeTool
+-- @field command string Command used to launch this tool's CLI
+-- @field command_variants ClaudeCodeCommandVariants Command variants configuration for this tool
+-- @field keymaps table|nil Keymaps for this tool
+-- @field keymaps.toggle table|nil @field keymaps.toggle.normal string|nil Normal mode toggle keymap
+--   @field keymaps.toggle.terminal string|nil Terminal mode toggle keymap
+
 --- ClaudeCodeShell class for shell configuration
 -- @table ClaudeCodeShell
 -- @field separator string Command separator used in shell commands (e.g., '&&', ';', '|')
@@ -81,6 +90,8 @@ local M = {}
 -- @field shell ClaudeCodeShell Shell-specific configuration
 -- @field command string Command used to launch Claude Code
 -- @field command_variants ClaudeCodeCommandVariants Command variants configuration
+-- @field tools table<string, ClaudeCodeTool> Additional CLI tools (e.g. "devin"), keyed by tool name.
+--   Each gets its own `<Tool>Code` command/variants/instances, alongside Claude Code.
 -- @field keymaps ClaudeCodeKeymaps Keymaps configuration
 -- @field input ClaudeCodeInput Input mode settings
 
@@ -116,7 +127,7 @@ M.default_config = {
   -- Git integration settings
   git = {
     use_git_root = true, -- Set CWD to git root when opening Claude Code (if in git project)
-    multi_instance = true, -- Use multiple Claude instances (one per git root)
+    multi_instance = 'tab', -- Use multiple Claude instances (one per Neovim tabpage)
   },
   -- Shell-specific settings
   shell = {
@@ -134,6 +145,16 @@ M.default_config = {
 
     -- Output options
     verbose = '--verbose', -- Enable verbose logging with full turn-by-turn output
+  },
+  -- Additional CLI tools beyond Claude Code. Each entry gets its own
+  -- `<Tool>Code` command, command variants, and terminal instances.
+  tools = {
+    devin = {
+      command = 'devin', -- Command used to launch Devin CLI
+      command_variants = {
+        resume = '--resume', -- Display an interactive conversation picker
+      },
+    },
   },
   -- Keymaps
   keymaps = {
@@ -314,8 +335,8 @@ local function validate_git_config(git)
     return false, 'git.use_git_root must be a boolean'
   end
 
-  if type(git.multi_instance) ~= 'boolean' then
-    return false, 'git.multi_instance must be a boolean'
+  if type(git.multi_instance) ~= 'boolean' and git.multi_instance ~= 'tab' then
+    return false, 'git.multi_instance must be a boolean or "tab"'
   end
 
   return true, nil
@@ -410,6 +431,44 @@ local function validate_command_variants_config(command_variants)
   return true, nil
 end
 
+--- Validate additional tools configuration
+--- @param tools table Tools configuration, keyed by tool name
+--- @return boolean valid
+--- @return string? error_message
+local function validate_tools_config(tools)
+  if type(tools) ~= 'table' then
+    return false, 'tools config must be a table'
+  end
+
+  for tool_name, tool in pairs(tools) do
+    if type(tool) ~= 'table' then
+      return false, 'tools.' .. tool_name .. ' must be a table'
+    end
+
+    if type(tool.command) ~= 'string' then
+      return false, 'tools.' .. tool_name .. '.command must be a string'
+    end
+
+    if tool.command_variants ~= nil then
+      local valid, err = validate_command_variants_config(tool.command_variants)
+      if not valid then
+        return false, 'tools.' .. tool_name .. '.' .. err
+      end
+    end
+
+    if tool.keymaps ~= nil then
+      if
+        type(tool.keymaps) ~= 'table'
+        or (tool.keymaps.toggle ~= nil and type(tool.keymaps.toggle) ~= 'table')
+      then
+        return false, 'tools.' .. tool_name .. '.keymaps.toggle must be a table'
+      end
+    end
+  end
+
+  return true, nil
+end
+
 --- Validate input configuration
 --- @param input table Input configuration
 --- @return boolean valid
@@ -498,6 +557,12 @@ local function validate_config(config)
 
   -- Validate command variants settings
   valid, err = validate_command_variants_config(config.command_variants)
+  if not valid then
+    return false, err
+  end
+
+  -- Validate additional tools settings
+  valid, err = validate_tools_config(config.tools)
   if not valid then
     return false, err
   end

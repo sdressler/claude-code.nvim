@@ -61,8 +61,7 @@ end
 function M.toggle()
   -- Check if we should use buffer input mode instead of terminal
   if M.config.input.mode == 'buffer' then
-    local instance_id = M.config.git.multi_instance and (git.get_git_root() or vim.fn.getcwd())
-      or 'global'
+    local instance_id = terminal.get_instance_id(M.config, git)
     input.open_input_buffer(M, M.config, git, instance_id)
   else
     -- Use terminal mode (default behavior)
@@ -74,6 +73,13 @@ function M.toggle()
       keymaps.setup_terminal_navigation(M, M.config)
     end
   end
+end
+
+--- Open a new tabpage and start (or reveal) its Claude Code instance
+--- With `git.multi_instance = "tab"`, this always starts a fresh session.
+function M.open_in_new_tab()
+  vim.cmd('tabnew')
+  M.toggle()
 end
 
 --- Toggle the Claude Code terminal window with a specific command variant
@@ -111,6 +117,33 @@ function M.toggle_with_variant(variant_name)
 
   -- Restore the original command
   M.config.command = original_command
+end
+
+--- Toggle the terminal for an additional configured tool (e.g. Devin)
+--- @param tool_name string Name of the tool, matching a key in config.tools
+--- @param variant_name string|nil Optional command variant for that tool
+function M.toggle_tool(tool_name, variant_name)
+  local tool_config = M.config.tools[tool_name]
+  if not tool_config then
+    vim.notify('Claude Code: unknown tool "' .. tool_name .. '"', vim.log.levels.ERROR)
+    return
+  end
+
+  local command = tool_config.command
+  if variant_name then
+    local variant_args = tool_config.command_variants and tool_config.command_variants[variant_name]
+    if variant_args then
+      command = command .. ' ' .. variant_args
+    end
+  end
+
+  terminal.toggle(M, M.config, git, { name = tool_name, command = command })
+
+  -- Set up terminal navigation keymaps after toggling
+  local bufnr = get_current_buffer_number()
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    keymaps.setup_terminal_navigation(M, M.config)
+  end
 end
 
 --- Get the current version of the plugin
