@@ -136,6 +136,17 @@ describe('terminal module', function()
       return { mode = 'n' }
     end
 
+    -- Mock vim.api.nvim_get_current_win
+    _G.vim.api.nvim_get_current_win = function()
+      return 1
+    end
+
+    -- Mock vim.keymap.set (initially a no-op, may be overridden in nested describes)
+    _G.vim.keymap = _G.vim.keymap or {}
+    _G.vim.keymap.set = function(mode, lhs, rhs, opts)
+      return true
+    end
+
     -- Setup test objects
     config = {
       command = 'claude',
@@ -820,6 +831,259 @@ describe('terminal module', function()
       local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
       assert.are.equal(math.floor(120 * 1.5), nvim_open_win_config.width)
       assert.are.equal(math.floor(editor_height * 1.1), nvim_open_win_config.height)
+    end)
+  end)
+
+  describe('regression: scroll-fighting tail-mode autocmd', function()
+    local registered_autocmds = {}
+    local feedkeys_called = false
+
+    before_each(function()
+      -- Reset tracking variables
+      registered_autocmds = {}
+      feedkeys_called = false
+
+      -- Initialize vim.keymap to support keymap.set() calls
+      _G.vim.keymap = _G.vim.keymap or {}
+
+      -- Mock vim.api.nvim_create_autocmd to capture registered autocmds
+      _G.vim.api.nvim_create_autocmd = function(events, opts)
+        table.insert(registered_autocmds, {
+          events = events,
+          opts = opts
+        })
+        return 1
+      end
+
+      -- Mock vim.api.nvim_feedkeys to track if it's ever called
+      _G.vim.api.nvim_feedkeys = function(keys, mode, escape_ks)
+        feedkeys_called = true
+        return true
+      end
+
+      -- Mock vim.api.nvim_create_augroup
+      _G.vim.api.nvim_create_augroup = function(name, opts)
+        return 100
+      end
+
+      -- Mock vim.api.nvim_buf_line_count
+      _G.vim.api.nvim_buf_line_count = function(bufnr)
+        return 500
+      end
+
+      -- Mock vim.api.nvim_win_is_valid
+      _G.vim.api.nvim_win_is_valid = function(win_id)
+        return win_id ~= nil and win_id > 0
+      end
+
+      -- Mock vim.api.nvim_set_option_value
+      _G.vim.api.nvim_set_option_value = function(option, value, opts)
+        return true
+      end
+
+      -- Mock vim.api.nvim_buf_set_option
+      _G.vim.api.nvim_buf_set_option = function(bufnr, option, value)
+        return true
+      end
+
+      -- Mock vim.api.nvim_buf_set_var
+      _G.vim.api.nvim_buf_set_var = function(bufnr, name, value)
+        return true
+      end
+
+      -- Mock vim.api.nvim_get_current_win
+      _G.vim.api.nvim_get_current_win = function()
+        return 1
+      end
+
+      -- Mock vim.keymap.set to track keymaps
+      _G.vim.keymap.set = function(mode, lhs, rhs, opts)
+        return true
+      end
+    end)
+
+    it('should not use feedkeys in TermResponse autocmd callback', function()
+      -- Create new instance
+      claude_code.claude_code.instances = {}
+      claude_code.claude_code.current_instance = nil
+
+      terminal.toggle(claude_code, config, git)
+
+      -- Find the TermResponse autocmd
+      local term_response_autocmd = nil
+      for _, autocmd in ipairs(registered_autocmds) do
+        if autocmd.events == 'TermResponse' then
+          term_response_autocmd = autocmd
+          break
+        end
+      end
+
+      assert.is_not_nil(term_response_autocmd, 'TermResponse autocmd should be registered')
+
+      -- Reset feedkeys flag before invoking callback
+      feedkeys_called = false
+
+      -- Invoke the callback directly
+      if term_response_autocmd.opts and term_response_autocmd.opts.callback then
+        term_response_autocmd.opts.callback()
+      end
+
+      -- Assert that feedkeys was never called
+      assert.is_false(feedkeys_called, 'feedkeys should not be called in TermResponse callback')
+    end)
+  end)
+
+  describe('regression: tail-mode for non-focused windows only', function()
+    local registered_autocmds = {}
+    local win_set_cursor_calls = {}
+    local current_win = 200
+
+    before_each(function()
+      -- Reset tracking variables
+      registered_autocmds = {}
+      win_set_cursor_calls = {}
+      current_win = 200
+
+      -- Initialize vim.keymap to support keymap.set() calls
+      _G.vim.keymap = _G.vim.keymap or {}
+
+      -- Mock vim.api.nvim_create_autocmd to capture registered autocmds
+      _G.vim.api.nvim_create_autocmd = function(events, opts)
+        table.insert(registered_autocmds, {
+          events = events,
+          opts = opts
+        })
+        return 1
+      end
+
+      -- Mock vim.api.nvim_create_augroup
+      _G.vim.api.nvim_create_augroup = function(name, opts)
+        return 100
+      end
+
+      -- Mock vim.api.nvim_get_current_win
+      _G.vim.api.nvim_get_current_win = function()
+        return current_win
+      end
+
+      -- Mock vim.api.nvim_buf_line_count
+      _G.vim.api.nvim_buf_line_count = function(bufnr)
+        return 500
+      end
+
+      -- Mock vim.api.nvim_win_set_cursor to track calls
+      _G.vim.api.nvim_win_set_cursor = function(win_id, pos)
+        table.insert(win_set_cursor_calls, { win_id = win_id, pos = pos })
+        return true
+      end
+
+      -- Mock vim.api.nvim_win_is_valid
+      _G.vim.api.nvim_win_is_valid = function(win_id)
+        return win_id ~= nil and win_id > 0
+      end
+
+      -- Mock vim.api.nvim_set_option_value
+      _G.vim.api.nvim_set_option_value = function(option, value, opts)
+        return true
+      end
+
+      -- Mock vim.api.nvim_buf_set_option
+      _G.vim.api.nvim_buf_set_option = function(bufnr, option, value)
+        return true
+      end
+
+      -- Mock vim.api.nvim_buf_set_var
+      _G.vim.api.nvim_buf_set_var = function(bufnr, name, value)
+        return true
+      end
+
+      -- Mock vim.keymap.set to track keymaps
+      _G.vim.keymap.set = function(mode, lhs, rhs, opts)
+        return true
+      end
+
+      -- Mock vim.fn.win_findbuf to return two windows
+      _G.vim.fn.win_findbuf = function(bufnr)
+        return { 200, 201 } -- Window 200 is focused, 201 is not
+      end
+    end)
+
+    it('should scroll non-focused windows but not the focused window', function()
+      -- Create new instance
+      claude_code.claude_code.instances = {}
+      claude_code.claude_code.current_instance = nil
+
+      terminal.toggle(claude_code, config, git)
+
+      -- Find the TermResponse autocmd
+      local term_response_autocmd = nil
+      for _, autocmd in ipairs(registered_autocmds) do
+        if autocmd.events == 'TermResponse' then
+          term_response_autocmd = autocmd
+          break
+        end
+      end
+
+      assert.is_not_nil(term_response_autocmd, 'TermResponse autocmd should be registered')
+
+      -- Reset cursor calls before invoking callback
+      win_set_cursor_calls = {}
+
+      -- Invoke the callback
+      if term_response_autocmd.opts and term_response_autocmd.opts.callback then
+        term_response_autocmd.opts.callback()
+      end
+
+      -- Should have one call to nvim_win_set_cursor for window 201 (non-focused)
+      local cursor_call_to_201 = false
+      local cursor_call_to_200 = false
+
+      for _, call in ipairs(win_set_cursor_calls) do
+        if call.win_id == 201 then
+          cursor_call_to_201 = true
+          assert.are.equal(500, call.pos[1], 'Should scroll non-focused window to last line')
+          assert.are.equal(0, call.pos[2], 'Should scroll to column 0')
+        end
+        if call.win_id == 200 then
+          cursor_call_to_200 = true
+        end
+      end
+
+      assert.is_true(cursor_call_to_201, 'Should call nvim_win_set_cursor for non-focused window 201')
+      assert.is_false(cursor_call_to_200, 'Should NOT call nvim_win_set_cursor for focused window 200')
+    end)
+
+    it('should handle case with only focused window', function()
+      -- Mock win_findbuf to return only the current window
+      _G.vim.fn.win_findbuf = function(bufnr)
+        return { 200 } -- Only focused window
+      end
+
+      -- Create new instance
+      claude_code.claude_code.instances = {}
+      claude_code.claude_code.current_instance = nil
+
+      terminal.toggle(claude_code, config, git)
+
+      -- Find the TermResponse autocmd
+      local term_response_autocmd = nil
+      for _, autocmd in ipairs(registered_autocmds) do
+        if autocmd.events == 'TermResponse' then
+          term_response_autocmd = autocmd
+          break
+        end
+      end
+
+      -- Reset cursor calls
+      win_set_cursor_calls = {}
+
+      -- Invoke the callback
+      if term_response_autocmd.opts and term_response_autocmd.opts.callback then
+        term_response_autocmd.opts.callback()
+      end
+
+      -- Should have no calls since only focused window is showing buffer
+      assert.are.equal(0, #win_set_cursor_calls, 'Should not scroll when only focused window is showing buffer')
     end)
   end)
 end)

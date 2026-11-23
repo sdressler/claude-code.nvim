@@ -211,33 +211,18 @@ local function configure_window_options(win_id, bufnr, config)
     vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Submit' })
   )
 
-  -- Force terminal to always show bottom (tail -f behavior)
-  local tail_group = vim.api.nvim_create_augroup('ClaudeCodeTailMode_' .. bufnr, { clear = true })
-
-  -- Keep view at bottom when terminal content changes (during redraws)
+  -- Keep non-focused windows showing this buffer tailing new output.
+  -- The focused window is left untouched so manual scrolling still works.
   vim.api.nvim_create_autocmd('TermResponse', {
-    group = tail_group,
+    group = vim.api.nvim_create_augroup('ClaudeCodeTailMode_' .. bufnr, { clear = true }),
     buffer = bufnr,
     callback = function()
-      -- Stay at bottom during terminal updates using feedkeys
+      local current_win = vim.api.nvim_get_current_win()
+      local last_line = vim.api.nvim_buf_line_count(bufnr)
       pcall(function()
-        local win_ids = vim.fn.win_findbuf(bufnr)
-        for _, wid in ipairs(win_ids) do
-          if vim.api.nvim_win_is_valid(wid) then
-            vim.api.nvim_win_call(wid, function()
-              -- Use feedkeys to jump to bottom in a way that works in terminal mode
-              vim.api.nvim_feedkeys(
-                vim.api.nvim_replace_termcodes('<C-\\><C-n>G', true, true, true),
-                't',
-                false
-              )
-              -- Immediately re-enter insert mode
-              vim.api.nvim_feedkeys(
-                vim.api.nvim_replace_termcodes('i', true, true, true),
-                't',
-                false
-              )
-            end)
+        for _, win_id in ipairs(vim.fn.win_findbuf(bufnr)) do
+          if win_id ~= current_win and vim.api.nvim_win_is_valid(win_id) then
+            vim.api.nvim_win_set_cursor(win_id, { last_line, 0 })
           end
         end
       end)
