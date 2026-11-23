@@ -639,201 +639,6 @@ describe('terminal module', function()
     end)
   end)
 
-  describe('floating window', function()
-    local nvim_open_win_called = false
-    local nvim_open_win_config = nil
-    local nvim_create_buf_called = false
-
-    before_each(function()
-      -- Reset tracking variables
-      nvim_open_win_called = false
-      nvim_open_win_config = nil
-      nvim_create_buf_called = false
-
-      -- Mock nvim_open_win to track calls
-      _G.vim.api.nvim_open_win = function(buf, enter, config)
-        nvim_open_win_called = true
-        nvim_open_win_config = config
-        return 123 -- Return a mock window ID
-      end
-
-      -- Mock nvim_create_buf for floating window
-      _G.vim.api.nvim_create_buf = function(listed, scratch)
-        nvim_create_buf_called = true
-        return 43 -- Return a mock buffer ID
-      end
-
-      -- Mock nvim_buf_set_option
-      _G.vim.api.nvim_buf_set_option = function(bufnr, option, value)
-        return true
-      end
-
-      -- Mock nvim_win_set_buf
-      _G.vim.api.nvim_win_set_buf = function(win_id, bufnr)
-        return true
-      end
-
-      -- Mock nvim_buf_set_name
-      _G.vim.api.nvim_buf_set_name = function(bufnr, name)
-        return true
-      end
-
-      -- Mock nvim_win_set_option
-      _G.vim.api.nvim_win_set_option = function(win_id, option, value)
-        return true
-      end
-
-      -- Mock termopen
-      _G.vim.fn.termopen = function(cmd)
-        return 1 -- Return a mock job ID
-      end
-
-      -- Mock vim.o.columns and vim.o.lines for percentage calculations
-      _G.vim.o.columns = 120
-      _G.vim.o.lines = 40
-      _G.vim.o.cmdheight = 1
-    end)
-
-    it('should create floating window when position is "float"', function()
-      -- Claude Code is not running - update for multi-instance support
-      claude_code.claude_code.instances = {}
-      
-      -- Configure floating window
-      config.window.position = 'float'
-      config.window.float = {
-        width = 80,
-        height = 20,
-        relative = 'editor',
-        border = 'rounded'
-      }
-
-      -- Call toggle
-      terminal.toggle(claude_code, config, git)
-
-      -- Check that nvim_open_win was called
-      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called for floating window')
-      assert.is_not_nil(nvim_open_win_config, 'floating window config should be provided')
-      assert.are.equal('editor', nvim_open_win_config.relative)
-      assert.are.equal('rounded', nvim_open_win_config.border)
-      assert.are.equal(80, nvim_open_win_config.width)
-      assert.are.equal(20, nvim_open_win_config.height)
-      -- Check calculated positions (clamped to ensure visibility)
-      assert.is_true(nvim_open_win_config.row >= 0)
-      assert.is_true(nvim_open_win_config.col >= 0)
-      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line
-      assert.is_true(nvim_open_win_config.row <= editor_height - 20) -- max_lines - height
-      assert.is_true(nvim_open_win_config.col <= 120 - 80) -- max_columns - width
-    end)
-
-    it('should calculate float dimensions from percentages', function()
-      -- Claude Code is not running - update for multi-instance support  
-      claude_code.claude_code.instances = {}
-      
-      -- Configure floating window with percentage dimensions
-      config.window.position = 'float'
-      config.window.float = {
-        width = '80%',
-        height = '50%',
-        relative = 'editor',
-        border = 'single'
-      }
-
-      -- Call toggle
-      terminal.toggle(claude_code, config, git)
-
-      -- Check that dimensions were calculated correctly  
-      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
-      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
-      local expected_width = math.floor(120 * 0.8) -- 80% of 120
-      local expected_height = math.floor(editor_height * 0.5) -- 50% of 38
-      assert.are.equal(expected_width, nvim_open_win_config.width)
-      assert.are.equal(expected_height, nvim_open_win_config.height)
-      -- Verify percentage calculations match expected formula
-      local mock_columns = 120
-      local mock_editor_height = 38
-      assert.are.equal(math.floor(mock_columns * 0.8), expected_width)
-      assert.are.equal(math.floor(mock_editor_height * 0.5), expected_height)
-    end)
-
-    it('should center floating window when position is "center"', function()
-      -- Claude Code is not running - update for multi-instance support
-      claude_code.claude_code.instances = {}
-      
-      -- Configure floating window to be centered
-      config.window.position = 'float'
-      config.window.float = {
-        width = 60,
-        height = 20,
-        row = 'center',
-        col = 'center',
-        relative = 'editor'
-      }
-
-      -- Call toggle
-      terminal.toggle(claude_code, config, git)
-
-      -- Check that window is centered
-      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
-      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
-      assert.are.equal(math.floor((editor_height - 20) / 2), nvim_open_win_config.row) -- (38-20)/2 = 9
-      assert.are.equal(30, nvim_open_win_config.col) -- (120-60)/2
-    end)
-
-    it('should reuse existing buffer for floating window when toggling', function()
-      -- Claude Code is already running - update for multi-instance support
-      local instance_id = "global"  -- Single instance mode
-      claude_code.claude_code.instances = { [instance_id] = 42 }
-      win_ids = {} -- No windows displaying the buffer
-      
-      -- Configure floating window
-      config.window.position = 'float'
-      config.window.float = {
-        width = 80,
-        height = 20,
-        relative = 'editor',
-        border = 'none'
-      }
-
-      -- Call toggle
-      terminal.toggle(claude_code, config, git)
-
-      -- Should open floating window with existing buffer
-      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
-      -- Verify floating window configuration is correct
-      assert.is_not_nil(nvim_open_win_config, 'Window config should be provided')
-      assert.are.equal('editor', nvim_open_win_config.relative)
-      assert.are.equal('none', nvim_open_win_config.border)
-      
-      -- Verify existing buffer is reused (buffer 42 from instances)
-      -- The specific buffer reuse logic is tested implicitly through the toggle function
-    end)
-
-    it('should handle out-of-bounds dimensions gracefully', function()
-      -- Claude Code is not running
-      claude_code.claude_code.bufnr = nil
-      
-      -- Configure floating window with large dimensions
-      config.window.position = 'float'
-      config.window.float = {
-        width = '150%',
-        height = '110%',
-        row = '90%',
-        col = '95%',
-        relative = 'editor',
-        border = 'rounded'
-      }
-
-      -- Call toggle
-      terminal.toggle(claude_code, config, git)
-
-      -- Check that window is created (even if dims are out of bounds)
-      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
-      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
-      assert.are.equal(math.floor(120 * 1.5), nvim_open_win_config.width)
-      assert.are.equal(math.floor(editor_height * 1.1), nvim_open_win_config.height)
-    end)
-  end)
-
   describe('regression: scroll-fighting tail-mode autocmd', function()
     local registered_autocmds = {}
     local feedkeys_called = false
@@ -1084,6 +889,354 @@ describe('terminal module', function()
 
       -- Should have no calls since only focused window is showing buffer
       assert.are.equal(0, #win_set_cursor_calls, 'Should not scroll when only focused window is showing buffer')
+    end)
+  end)
+
+  describe('regression: buffer-scoped terminal keymaps', function()
+    local keymap_set_calls = {}
+
+    before_each(function()
+      -- Reset tracking variables
+      keymap_set_calls = {}
+
+      -- Mock vim.keymap.set to capture buffer-scoped keymaps
+      _G.vim.keymap = _G.vim.keymap or {}
+      _G.vim.keymap.set = function(mode, lhs, rhs, opts)
+        table.insert(keymap_set_calls, {
+          mode = mode,
+          lhs = lhs,
+          rhs = rhs,
+          opts = opts
+        })
+      end
+
+      -- Mock vim.api.nvim_create_autocmd
+      _G.vim.api.nvim_create_autocmd = function(events, opts)
+        return 1
+      end
+
+      -- Mock vim.api.nvim_create_augroup
+      _G.vim.api.nvim_create_augroup = function(name, opts)
+        return 100
+      end
+
+      -- Mock vim.api.nvim_buf_line_count
+      _G.vim.api.nvim_buf_line_count = function(bufnr)
+        return 500
+      end
+
+      -- Mock vim.api.nvim_win_is_valid
+      _G.vim.api.nvim_win_is_valid = function(win_id)
+        return true
+      end
+
+      -- Mock vim.api.nvim_set_option_value
+      _G.vim.api.nvim_set_option_value = function(option, value, opts)
+        return true
+      end
+
+      -- Mock vim.api.nvim_buf_set_option
+      _G.vim.api.nvim_buf_set_option = function(bufnr, option, value)
+        return true
+      end
+
+      -- Mock vim.api.nvim_buf_set_var
+      _G.vim.api.nvim_buf_set_var = function(bufnr, name, value)
+        return true
+      end
+
+      -- Mock vim.api.nvim_get_current_win
+      _G.vim.api.nvim_get_current_win = function()
+        return 1
+      end
+
+      -- Mock vim.fn.win_findbuf
+      _G.vim.fn.win_findbuf = function(bufnr)
+        return { 1 }
+      end
+
+      -- Mock vim.cmd
+      _G.vim.cmd = function(cmd) end
+
+      -- Mock vim.api.nvim_create_buf
+      _G.vim.api.nvim_create_buf = function(listed, scratch)
+        return 1
+      end
+
+      -- Mock vim.api.nvim_buf_is_valid
+      _G.vim.api.nvim_buf_is_valid = function(bufnr)
+        return bufnr ~= nil
+      end
+    end)
+
+    it('should register <C-x> keymap as buffer-scoped', function()
+      claude_code.claude_code.instances = {}
+      claude_code.claude_code.current_instance = nil
+
+      terminal.toggle(claude_code, config, git)
+
+      -- Find the <C-x> keymap
+      local cx_keymap = nil
+      for _, keymap in ipairs(keymap_set_calls) do
+        if keymap.lhs == '<C-x>' then
+          cx_keymap = keymap
+          break
+        end
+      end
+
+      assert.is_not_nil(cx_keymap, '<C-x> keymap should be registered')
+      assert.are.equal('t', cx_keymap.mode, '<C-x> should be in terminal mode')
+      assert.is_not_nil(cx_keymap.opts, '<C-x> keymap should have options')
+      assert.is_not_nil(
+        cx_keymap.opts.buffer,
+        '<C-x> keymap should be buffer-scoped (opts.buffer should be set)'
+      )
+    end)
+
+    it('should register <S-CR> keymap as buffer-scoped', function()
+      claude_code.claude_code.instances = {}
+      claude_code.claude_code.current_instance = nil
+
+      terminal.toggle(claude_code, config, git)
+
+      -- Find the <S-CR> keymap
+      local shift_cr_keymap = nil
+      for _, keymap in ipairs(keymap_set_calls) do
+        if keymap.lhs == '<S-CR>' then
+          shift_cr_keymap = keymap
+          break
+        end
+      end
+
+      assert.is_not_nil(shift_cr_keymap, '<S-CR> keymap should be registered')
+      assert.are.equal('t', shift_cr_keymap.mode, '<S-CR> should be in terminal mode')
+      assert.is_not_nil(shift_cr_keymap.opts, '<S-CR> keymap should have options')
+      assert.is_not_nil(
+        shift_cr_keymap.opts.buffer,
+        '<S-CR> keymap should be buffer-scoped (opts.buffer should be set)'
+      )
+    end)
+
+    it('should have matching buffer numbers for all terminal keymaps', function()
+      claude_code.claude_code.instances = {}
+      claude_code.claude_code.current_instance = nil
+
+      terminal.toggle(claude_code, config, git)
+
+      -- Collect all terminal mode keymaps
+      local terminal_keymaps = {}
+      for _, keymap in ipairs(keymap_set_calls) do
+        if keymap.mode == 't' then
+          table.insert(terminal_keymaps, keymap)
+        end
+      end
+
+      assert.is_true(#terminal_keymaps > 0, 'Should have terminal mode keymaps')
+
+      -- All terminal keymaps should have the same buffer number
+      local buffer_num = terminal_keymaps[1].opts and terminal_keymaps[1].opts.buffer
+      for _, keymap in ipairs(terminal_keymaps) do
+        assert.are.equal(
+          buffer_num,
+          keymap.opts.buffer,
+          'All terminal keymaps should be for the same buffer'
+        )
+      end
+    end)
+  end)
+
+  describe('floating window', function()
+    local nvim_open_win_called = false
+    local nvim_open_win_config = nil
+    local nvim_create_buf_called = false
+
+    before_each(function()
+      -- Reset tracking variables
+      nvim_open_win_called = false
+      nvim_open_win_config = nil
+      nvim_create_buf_called = false
+
+      -- Mock nvim_open_win to track calls
+      _G.vim.api.nvim_open_win = function(buf, enter, config)
+        nvim_open_win_called = true
+        nvim_open_win_config = config
+        return 123 -- Return a mock window ID
+      end
+
+      -- Mock nvim_create_buf for floating window
+      _G.vim.api.nvim_create_buf = function(listed, scratch)
+        nvim_create_buf_called = true
+        return 43 -- Return a mock buffer ID
+      end
+
+      -- Mock nvim_buf_set_option
+      _G.vim.api.nvim_buf_set_option = function(bufnr, option, value)
+        return true
+      end
+
+      -- Mock nvim_win_set_buf
+      _G.vim.api.nvim_win_set_buf = function(win_id, bufnr)
+        return true
+      end
+
+      -- Mock nvim_buf_set_name
+      _G.vim.api.nvim_buf_set_name = function(bufnr, name)
+        return true
+      end
+
+      -- Mock nvim_win_set_option
+      _G.vim.api.nvim_win_set_option = function(win_id, option, value)
+        return true
+      end
+
+      -- Mock termopen
+      _G.vim.fn.termopen = function(cmd)
+        return 1 -- Return a mock job ID
+      end
+
+      -- Mock vim.o.columns and vim.o.lines for percentage calculations
+      _G.vim.o.columns = 120
+      _G.vim.o.lines = 40
+      _G.vim.o.cmdheight = 1
+    end)
+
+    it('should create floating window when position is "float"', function()
+      -- Claude Code is not running - update for multi-instance support
+      claude_code.claude_code.instances = {}
+      
+      -- Configure floating window
+      config.window.position = 'float'
+      config.window.float = {
+        width = 80,
+        height = 20,
+        relative = 'editor',
+        border = 'rounded'
+      }
+
+      -- Call toggle
+      terminal.toggle(claude_code, config, git)
+
+      -- Check that nvim_open_win was called
+      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called for floating window')
+      assert.is_not_nil(nvim_open_win_config, 'floating window config should be provided')
+      assert.are.equal('editor', nvim_open_win_config.relative)
+      assert.are.equal('rounded', nvim_open_win_config.border)
+      assert.are.equal(80, nvim_open_win_config.width)
+      assert.are.equal(20, nvim_open_win_config.height)
+      -- Check calculated positions (clamped to ensure visibility)
+      assert.is_true(nvim_open_win_config.row >= 0)
+      assert.is_true(nvim_open_win_config.col >= 0)
+      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line
+      assert.is_true(nvim_open_win_config.row <= editor_height - 20) -- max_lines - height
+      assert.is_true(nvim_open_win_config.col <= 120 - 80) -- max_columns - width
+    end)
+
+    it('should calculate float dimensions from percentages', function()
+      -- Claude Code is not running - update for multi-instance support  
+      claude_code.claude_code.instances = {}
+      
+      -- Configure floating window with percentage dimensions
+      config.window.position = 'float'
+      config.window.float = {
+        width = '80%',
+        height = '50%',
+        relative = 'editor',
+        border = 'single'
+      }
+
+      -- Call toggle
+      terminal.toggle(claude_code, config, git)
+
+      -- Check that dimensions were calculated correctly  
+      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
+      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
+      local expected_width = math.floor(120 * 0.8) -- 80% of 120
+      local expected_height = math.floor(editor_height * 0.5) -- 50% of 38
+      assert.are.equal(expected_width, nvim_open_win_config.width)
+      assert.are.equal(expected_height, nvim_open_win_config.height)
+      -- Verify percentage calculations match expected formula
+      local mock_columns = 120
+      local mock_editor_height = 38
+      assert.are.equal(math.floor(mock_columns * 0.8), expected_width)
+      assert.are.equal(math.floor(mock_editor_height * 0.5), expected_height)
+    end)
+
+    it('should center floating window when position is "center"', function()
+      -- Claude Code is not running - update for multi-instance support
+      claude_code.claude_code.instances = {}
+      
+      -- Configure floating window to be centered
+      config.window.position = 'float'
+      config.window.float = {
+        width = 60,
+        height = 20,
+        row = 'center',
+        col = 'center',
+        relative = 'editor'
+      }
+
+      -- Call toggle
+      terminal.toggle(claude_code, config, git)
+
+      -- Check that window is centered
+      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
+      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
+      assert.are.equal(math.floor((editor_height - 20) / 2), nvim_open_win_config.row) -- (38-20)/2 = 9
+      assert.are.equal(30, nvim_open_win_config.col) -- (120-60)/2
+    end)
+
+    it('should reuse existing buffer for floating window when toggling', function()
+      -- Claude Code is already running - update for multi-instance support
+      local instance_id = "global"  -- Single instance mode
+      claude_code.claude_code.instances = { [instance_id] = 42 }
+      win_ids = {} -- No windows displaying the buffer
+      
+      -- Configure floating window
+      config.window.position = 'float'
+      config.window.float = {
+        width = 80,
+        height = 20,
+        relative = 'editor',
+        border = 'none'
+      }
+
+      -- Call toggle
+      terminal.toggle(claude_code, config, git)
+
+      -- Should open floating window with existing buffer
+      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
+      -- Verify floating window configuration is correct
+      assert.is_not_nil(nvim_open_win_config, 'Window config should be provided')
+      assert.are.equal('editor', nvim_open_win_config.relative)
+      assert.are.equal('none', nvim_open_win_config.border)
+      
+      -- Verify existing buffer is reused (buffer 42 from instances)
+      -- The specific buffer reuse logic is tested implicitly through the toggle function
+    end)
+
+    it('should handle out-of-bounds dimensions gracefully', function()
+      -- Claude Code is not running
+      claude_code.claude_code.bufnr = nil
+      
+      -- Configure floating window with large dimensions
+      config.window.position = 'float'
+      config.window.float = {
+        width = '150%',
+        height = '110%',
+        row = '90%',
+        col = '95%',
+        relative = 'editor',
+        border = 'rounded'
+      }
+
+      -- Call toggle
+      terminal.toggle(claude_code, config, git)
+
+      -- Check that window is created (even if dims are out of bounds)
+      assert.is_true(nvim_open_win_called, 'nvim_open_win should be called')
+      local editor_height = 40 - 1 - 1 -- lines - cmdheight - status line = 38
+      assert.are.equal(math.floor(120 * 1.5), nvim_open_win_config.width)
+      assert.are.equal(math.floor(editor_height * 1.1), nvim_open_win_config.height)
     end)
   end)
 end)

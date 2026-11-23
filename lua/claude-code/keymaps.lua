@@ -39,22 +39,6 @@ function M.register_keymaps(claude_code, config)
     )
   end
 
-  -- Interrupt Claude with Escape key
-  vim.api.nvim_set_keymap(
-    't',
-    '<C-x>',
-    [[<C-\><C-n>:lua require('claude-code.keymaps').send_interrupt()<CR>]],
-    vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Interrupt' })
-  )
-
-  -- Insert newline marker in terminal mode
-  vim.api.nvim_set_keymap(
-    't',
-    '<S-CR>',
-    [[\<CR>]],
-    vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Insert newline marker' })
-  )
-
   -- Register variant keymaps if configured
   if config.keymaps.toggle.variants then
     for variant_name, keymap in pairs(config.keymaps.toggle.variants) do

@@ -210,6 +210,23 @@ local function configure_window_options(win_id, bufnr, config)
     '<CR>',
     vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Submit' })
   )
+  -- Interrupt Claude with Ctrl-X (buffer-scoped to this terminal only)
+  vim.keymap.set(
+    't',
+    '<C-x>',
+    function()
+      vim.cmd 'stopinsert'
+      require('claude-code.keymaps').send_interrupt()
+    end,
+    vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Interrupt' })
+  )
+  -- Insert newline marker with Shift-Enter (buffer-scoped to this terminal only)
+  vim.keymap.set(
+    't',
+    '<S-CR>',
+    [[\<CR>]],
+    vim.tbl_extend('force', term_map_opts, { desc = 'Claude Code: Insert newline marker' })
+  )
 
   -- Keep non-focused windows showing this buffer tailing new output.
   -- The focused window is left untouched so manual scrolling still works.

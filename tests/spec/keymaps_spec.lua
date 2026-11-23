@@ -191,4 +191,52 @@ describe('keymaps', function()
       assert.is_false(window_navigation_found, "Window navigation keybindings should not be registered when disabled")
     end)
   end)
+
+  describe('regression: global interrupt and newline keymaps removed', function()
+    it('should not register <C-x> globally from keymaps module', function()
+      keymaps.register_keymaps(claude_code, config)
+
+      local cx_found = false
+      for _, mapping in ipairs(mapped_keys) do
+        if mapping.lhs == '<C-x>' then
+          cx_found = true
+          break
+        end
+      end
+
+      assert.is_false(cx_found, '<C-x> should not be registered globally from keymaps module')
+    end)
+
+    it('should not register <S-CR> globally from keymaps module', function()
+      keymaps.register_keymaps(claude_code, config)
+
+      local shift_cr_found = false
+      for _, mapping in ipairs(mapped_keys) do
+        if mapping.lhs == '<S-CR>' then
+          shift_cr_found = true
+          break
+        end
+      end
+
+      assert.is_false(shift_cr_found, '<S-CR> should not be registered globally from keymaps module')
+    end)
+
+    it('should only register normal mode and toggle keybindings globally', function()
+      keymaps.register_keymaps(claude_code, config)
+
+      -- Check that only expected global keymaps are registered
+      for _, mapping in ipairs(mapped_keys) do
+        -- Global keymaps should be for normal mode toggle or terminal mode toggle
+        if mapping.opts and not mapping.opts.buffer then
+          -- These are global keymaps
+          local is_toggle = (mapping.mode == 'n' and mapping.lhs == '<leader>ac')
+            or (mapping.mode == 't' and mapping.lhs == '<C-o>')
+          assert.is_true(
+            is_toggle or mapping.mode ~= 't',
+            'Global keymaps should not be in terminal mode (except toggle)'
+          )
+        end
+      end
+    end)
+  end)
 end)
