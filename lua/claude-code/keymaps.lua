@@ -39,6 +39,15 @@ function M.register_keymaps(claude_code, config)
     )
   end
 
+  if config.keymaps.toggle.input then
+    vim.api.nvim_set_keymap(
+      'n',
+      config.keymaps.toggle.input,
+      [[<cmd>ClaudeCodeInput<CR>]],
+      vim.tbl_extend('force', map_opts, { desc = 'Claude Code: Toggle Input' })
+    )
+  end
+
   -- Register variant keymaps if configured
   if config.keymaps.toggle.variants then
     for variant_name, keymap in pairs(config.keymaps.toggle.variants) do
@@ -98,6 +107,13 @@ function M.register_keymaps(claude_code, config)
         which_key.add {
           mode = 't',
           { config.keymaps.toggle.terminal, desc = 'Claude Code: Toggle', icon = '🤖' },
+        }
+      end
+
+      if config.keymaps.toggle.input then
+        which_key.add {
+          mode = 'n',
+          { config.keymaps.toggle.input, desc = 'Claude Code: Toggle Input', icon = '🤖' },
         }
       end
 

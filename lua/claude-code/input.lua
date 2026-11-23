@@ -451,21 +451,39 @@ function M.create_input_buffer(config, git, instance_id)
   return bufnr
 end
 
---- Open Claude terminal and input buffer side-by-side
+--- Toggle the input buffer window on/off (buffer input mode only)
+--- If the input buffer window is already open, close it.
+--- Otherwise, ensure the terminal is visible and open the input buffer beside it.
 --- @param claude_code table The main plugin module
 --- @param config table Plugin configuration
 --- @param git table Git module
 --- @param instance_id string Instance identifier
-function M.open_input_buffer(claude_code, config, git, instance_id)
+function M.toggle_input_buffer(claude_code, config, git, instance_id)
   local terminal = require('claude-code.terminal')
 
-  -- First, ensure Claude terminal is open
-  terminal.toggle(claude_code, config, git)
+  -- If input window is already open, close it
+  if M.state.winid and vim.api.nvim_win_is_valid(M.state.winid) then
+    vim.api.nvim_win_close(M.state.winid, true)
+    M.state.winid = nil
+    return
+  end
+
+  -- Ensure Claude terminal is visible (but don't toggle if already visible)
+  local term_bufnr = claude_code.claude_code.instances[instance_id]
+  local term_win_ids = term_bufnr and vim.api.nvim_buf_is_valid(term_bufnr) and vim.fn.win_findbuf(term_bufnr)
+    or {}
+
+  if #term_win_ids == 0 then
+    -- Terminal is not visible, so toggle it open
+    terminal.toggle(claude_code, config, git)
+  else
+    -- Terminal is already visible but may not be the focused window;
+    -- move there so the input split below lands next to it, not wherever
+    -- the user's cursor currently is.
+    vim.api.nvim_set_current_win(term_win_ids[1])
+  end
 
   local bufnr = M.create_input_buffer(config, git, instance_id)
-
-  -- Get current window (should be the Claude terminal after toggle)
-  local claude_win = vim.api.nvim_get_current_win()
 
   -- Create a horizontal split below for input
   vim.cmd('below split')

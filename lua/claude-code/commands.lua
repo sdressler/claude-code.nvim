@@ -47,6 +47,11 @@ function M.register_commands(claude_code)
     input.send_buffer_to_claude()
   end, { desc = 'Send buffer content to Claude (buffer input mode)' })
 
+  -- Add toggle input buffer command (buffer input mode)
+  vim.api.nvim_create_user_command('ClaudeCodeInput', function()
+    claude_code.toggle_input()
+  end, { desc = 'Toggle Claude Code input buffer window' })
+
   -- Register commands for each additional configured tool (e.g. Devin)
   local tools = (claude_code.config and claude_code.config.tools) or {}
   for tool_name, tool_config in pairs(tools) do

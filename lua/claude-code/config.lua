@@ -39,6 +39,7 @@ local M = {}
 -- @table ClaudeCodeKeymapsToggle
 -- @field normal string|boolean Normal mode keymap for toggling Claude Code, false to disable
 -- @field terminal string|boolean Terminal mode keymap for toggling Claude Code, false to disable
+-- @field input string|boolean Normal mode keymap for toggling input buffer window, false to disable
 
 --- ClaudeCodeKeymaps class for keymap configuration
 -- @table ClaudeCodeKeymaps
@@ -161,6 +162,7 @@ M.default_config = {
     toggle = {
       normal = '<C-,>', -- Normal mode keymap for toggling Claude Code
       terminal = '<C-,>', -- Terminal mode keymap for toggling Claude Code
+      input = '<leader>ci', -- Normal mode keymap for toggling input buffer window
       variants = {
         continue = '<leader>cC', -- Normal mode keymap for Claude Code with continue flag
         verbose = '<leader>cV', -- Normal mode keymap for Claude Code with verbose flag
@@ -385,6 +387,12 @@ local function validate_keymaps_config(keymaps)
 
   if not (keymaps.toggle.terminal == false or type(keymaps.toggle.terminal) == 'string') then
     return false, 'keymaps.toggle.terminal must be a string or false'
+  end
+
+  if keymaps.toggle.input ~= nil then
+    if not (keymaps.toggle.input == false or type(keymaps.toggle.input) == 'string') then
+      return false, 'keymaps.toggle.input must be a string or false'
+    end
   end
 
   -- Validate variant keymaps if they exist

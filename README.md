@@ -154,6 +154,7 @@ require("claude-code").setup({
     toggle = {
       normal = "<C-,>",       -- Normal mode keymap for toggling Claude Code, false to disable
       terminal = "<C-,>",     -- Terminal mode keymap for toggling Claude Code, false to disable
+      input = "<leader>ci",   -- Normal mode keymap for toggling input buffer window, false to disable
       variants = {
         continue = "<leader>cC", -- Normal mode keymap for Claude Code with continue flag
         verbose = "<leader>cV",  -- Normal mode keymap for Claude Code with verbose flag
@@ -226,10 +227,11 @@ vim.keymap.set('n', '<leader>cc', '<cmd>ClaudeCode<CR>', { desc = 'Toggle Claude
 
 ### Commands
 
-Basic command:
+Basic commands:
 
 - `:ClaudeCode` - Toggle the Claude Code terminal window
 - `:ClaudeCodeTab` - Open a new tab and start (with `multi_instance = "tab"`, a fresh) Claude Code session in it
+- `:ClaudeCodeInput` - Toggle the separate input buffer window (buffer input mode only)
 
 Conversation management commands:
 
@@ -248,8 +250,8 @@ Additional tools (e.g. `:DevinCode`, `:DevinCodeResume`) are generated the same 
 
 Default key mappings:
 
-- `<leader>ac` - Toggle Claude Code terminal window (normal mode)
 - `<C-,>` - Toggle Claude Code terminal window (both normal and terminal modes)
+- `<leader>ci` - Toggle input buffer window (buffer input mode only, normal mode)
 
 Variant mode mappings (if configured):
 

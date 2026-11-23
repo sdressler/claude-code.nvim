@@ -56,23 +56,24 @@ local function get_current_buffer_number()
   return nil
 end
 
---- Toggle the Claude Code terminal window or open buffer input
+--- Toggle the Claude Code terminal window
 --- This is a public function used by commands
 function M.toggle()
-  -- Check if we should use buffer input mode instead of terminal
-  if M.config.input.mode == 'buffer' then
-    local instance_id = terminal.get_instance_id(M.config, git)
-    input.open_input_buffer(M, M.config, git, instance_id)
-  else
-    -- Use terminal mode (default behavior)
-    terminal.toggle(M, M.config, git)
+  -- Always toggle the terminal, never auto-open input buffer
+  terminal.toggle(M, M.config, git)
 
-    -- Set up terminal navigation keymaps after toggling
-    local bufnr = get_current_buffer_number()
-    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-      keymaps.setup_terminal_navigation(M, M.config)
-    end
+  -- Set up terminal navigation keymaps after toggling
+  local bufnr = get_current_buffer_number()
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    keymaps.setup_terminal_navigation(M, M.config)
   end
+end
+
+--- Toggle the separate input buffer window (buffer input mode only)
+--- This is a public function that opens/closes the input buffer independently
+function M.toggle_input()
+  local instance_id = terminal.get_instance_id(M.config, git)
+  input.toggle_input_buffer(M, M.config, git, instance_id)
 end
 
 --- Open a new tabpage and start (or reveal) its Claude Code instance

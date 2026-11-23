@@ -134,7 +134,7 @@ describe('command registration', function()
       local notify_called = false
       local notify_message = nil
       local notify_level = nil
-      
+
       -- Mock vim.notify to capture calls
       _G.vim.notify = function(msg, level)
         notify_called = true
@@ -142,7 +142,7 @@ describe('command registration', function()
         notify_level = level
         return true
       end
-      
+
       -- Find the ClaudeCodeVersion command and execute its callback
       for _, cmd in ipairs(registered_commands) do
         if cmd.name == 'ClaudeCodeVersion' then
@@ -150,10 +150,44 @@ describe('command registration', function()
           break
         end
       end
-      
+
       assert.is_true(notify_called, "vim.notify should be called when ClaudeCodeVersion command is executed")
       assert.is_not_nil(notify_message, "Notification message should not be nil")
       assert.is_not_nil(string.find(notify_message, 'Claude Code version'), "Notification should contain version information")
+    end)
+
+    it('should register ClaudeCodeInput command', function()
+      local command_registered = false
+      for _, cmd in ipairs(registered_commands) do
+        if cmd.name == 'ClaudeCodeInput' then
+          command_registered = true
+          assert.is_not_nil(cmd.callback, "ClaudeCodeInput command should have a callback")
+          assert.is_not_nil(cmd.opts, "ClaudeCodeInput command should have options")
+          assert.is_not_nil(cmd.opts.desc, "ClaudeCodeInput command should have a description")
+          break
+        end
+      end
+
+      assert.is_true(command_registered, "ClaudeCodeInput command should be registered")
+    end)
+
+    it('should call toggle_input when ClaudeCodeInput command is executed', function()
+      local toggle_input_called = false
+
+      -- Find the ClaudeCodeInput command and execute its callback
+      for _, cmd in ipairs(registered_commands) do
+        if cmd.name == 'ClaudeCodeInput' then
+          cmd.callback = function()
+            toggle_input_called = true
+            return true
+          end
+
+          cmd.callback()
+          break
+        end
+      end
+
+      assert.is_true(toggle_input_called, "toggle_input function should be called when ClaudeCodeInput command is executed")
     end)
   end)
 end)
